@@ -4,9 +4,9 @@ __pycache__/
 *.pyo
 
 # Environments & tooling
-.venv/
-env/
-ENV/
+backend/.venv/
+backend/env/
+backend/ENV/
 .vscode/
 *.code-workspace
 
