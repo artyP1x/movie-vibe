@@ -117,6 +117,12 @@ class CatalogItem(BaseModel):
     duration_text: Optional[str]                # <--- новое
     episodes: Optional[int] 
 
+class CatalogResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    results: List[CatalogItem]
+
 # --- Utils
 
 def now_ms() -> int:
@@ -237,7 +243,7 @@ def catalog_search(filters: CatalogFilters):
 
     # считаем total
     count_sql = f"SELECT COUNT(*) AS cnt FROM unified_catalog WHERE {where_sql}"
-    con = _connect()
+    con = conn()
     try:
         total = con.execute(count_sql, params).fetchone()["cnt"]
 
