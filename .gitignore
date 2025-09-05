@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environments & tooling
+.venv/
+env/
+ENV/
+.vscode/
+*.code-workspace
+
+# Node/PM2/logs (если где-то встретится)
+node_modules/
+npm-debug.log*
+yarn.lock
+.pnpm-store/
+logs/
+*.log
+# PM2 локальные артефакты — на всякий случай:
+.pm2/
+*.pid
+
+# Databases / caches
+*.db
+*.sqlite
+*.sqlite3
+backend/imdb.db
+
+# Secrets
+.env
+backend/.env
+
+# Build/Artifacts
+dist/
+build/
+
