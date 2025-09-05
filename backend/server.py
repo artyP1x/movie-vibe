@@ -4,14 +4,14 @@ from pydantic import BaseModel
 import os, sqlite3, json, time
 import requests
 from dotenv import load_dotenv
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 
 load_dotenv()
 TMDB_BEARER = os.getenv('TMDB_BEARER')
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 PORT = int(os.getenv('PORT', '8000'))
 CORS_ORIGINS = [o.strip() for o in os.getenv('CORS_ORIGINS', '*').split(',') if o]
-DB_PATH = os.path.join(os.path.dirname(__file__), 'imdb.db')
+DB_PATH = "/home/skillseek/app/backend/imdb.db" 
 TMDB_API = 'https://api.themoviedb.org/3'
 
 app = FastAPI(title='Movie Night API — Enriched TMDB + IMDb')
@@ -86,6 +86,37 @@ class MovieOut(BaseModel):
     imdb_votes: Optional[int] = None
     imdb_id: Optional[str] = None
 
+class CatalogFilters(BaseModel):
+    title: Optional[str] = None
+    year_from: Optional[int] = None
+    year_to: Optional[int] = None
+    tmdb_min: Optional[float] = None
+    imdb_min: Optional[float] = None
+    genres: Optional[List[str]] = None
+    genres_mode: Literal["any","all"] = "any"
+    director: Optional[str] = None
+    actor: Optional[str] = None
+    type: Optional[Literal["movie","tv"]] = None   # <--- новое
+    sort_by: Literal["imdb","tmdb","year","title"] = "imdb"
+    order: Literal["desc","asc"] = "desc"
+    page: int = 1
+    page_size: int = 20
+
+class CatalogItem(BaseModel):
+    tmdb_id: int
+    imdb_id: Optional[str]
+    title: str
+    year: Optional[int]
+    tmdb_rating: Optional[float]
+    imdb_rating: Optional[float]
+    genres: Optional[str]
+    director: Optional[str]
+    actors: Optional[str]
+    poster_url: Optional[str]
+    type: Literal["movie","tv"]                 # <--- новое
+    duration_text: Optional[str]                # <--- новое
+    episodes: Optional[int] 
+
 # --- Utils
 
 def now_ms() -> int:
@@ -140,6 +171,91 @@ def get_cached_enriched(tmdb_id: int) -> Dict[str, Any] | None:
     return dict(row)
 
 # --- Routes
+@app.post("/catalog/search", response_model=CatalogResponse)
+def catalog_search(filters: CatalogFilters):
+    where = ["1=1"]
+    params: List[object] = []
+
+    if filters.title:
+        where.append("title LIKE ?")
+        params.append(f"%{filters.title}%")
+
+    if filters.year_from is not None:
+        where.append("year >= ?")
+        params.append(filters.year_from)
+
+    if filters.year_to is not None:
+        where.append("year <= ?")
+        params.append(filters.year_to)
+
+    if filters.tmdb_min is not None:
+        where.append("tmdb_rating >= ?")
+        params.append(filters.tmdb_min)
+
+    if filters.imdb_min is not None:
+        where.append("imdb_rating >= ?")
+        params.append(filters.imdb_min)
+
+    if filters.director:
+        where.append("director LIKE ?")
+        params.append(f"%{filters.director}%")
+
+    if filters.actor:
+        where.append("actors LIKE ?")
+        params.append(f"%{filters.actor}%")
+
+    # жанры лежат строкой "Action, Comedy, ..."
+    if filters.genres:
+        if filters.genres_mode == "all":
+            # все жанры должны встречаться
+            for g in filters.genres:
+                where.append("genres LIKE ?")
+                params.append(f"%{g}%")
+        else:
+            # хотя бы один из жанров
+            ors = []
+            for g in filters.genres:
+                ors.append("genres LIKE ?")
+                params.append(f"%{g}%")
+            where.append("(" + " OR ".join(ors) + ")")
+
+    where_sql = " AND ".join(where)
+
+    sort_map = {
+        "imdb": "imdb_rating",
+        "tmdb": "tmdb_rating",
+        "year": "year",
+        "title": "title"
+    }
+    order_by = sort_map[filters.sort_by]
+    order_dir = "DESC" if filters.order.lower() == "desc" else "ASC"
+
+    # пагинация
+    page = max(1, filters.page)
+    page_size = min(100, max(1, filters.page_size))
+    offset = (page - 1) * page_size
+
+    # считаем total
+    count_sql = f"SELECT COUNT(*) AS cnt FROM unified_catalog WHERE {where_sql}"
+    con = _connect()
+    try:
+        total = con.execute(count_sql, params).fetchone()["cnt"]
+
+        # основная выборка
+        select_sql = f"""
+        SELECT tmdb_id, imdb_id, title, year, tmdb_rating, imdb_rating, genres, director, actors, poster_url
+        FROM unified_catalog
+        WHERE {where_sql}
+        ORDER BY {order_by} {order_dir}, title ASC
+        LIMIT ? OFFSET ?
+        """
+        rows = con.execute(select_sql, (*params, page_size, offset)).fetchall()
+
+        results = [CatalogItem(**dict(r)) for r in rows]
+        return CatalogResponse(total=total, page=page, page_size=page_size, results=results)
+    finally:
+        con.close()
+
 @app.get('/health')
 def health():
     return {'ok': True}
