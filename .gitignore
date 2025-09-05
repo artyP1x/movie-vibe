@@ -29,6 +29,7 @@ backend/imdb.db
 
 # Secrets
 .env
+backend/.env.example
 backend/.env
 
 # Build/Artifacts
