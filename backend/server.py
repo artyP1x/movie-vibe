@@ -5,6 +5,8 @@ import os, sqlite3, json, time
 import requests
 from dotenv import load_dotenv
 from typing import List, Optional, Dict, Any, Literal
+from lobby import router as lobby_router
+from common import JOIN_BASE_URL
 
 load_dotenv()
 TMDB_BEARER = os.getenv('TMDB_BEARER')
@@ -16,6 +18,8 @@ TMDB_API = 'https://api.themoviedb.org/3'
 
 app = FastAPI(title='Movie Night API — Enriched TMDB + IMDb')
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS or ['*'], allow_methods=['*'], allow_headers=['*'])
+
+app.include_router(lobby_router)
 
 # --- SQLite helpers
 
